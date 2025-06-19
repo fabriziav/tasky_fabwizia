@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: Deploy Tasky on AKS
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tasky_fabwizia
+  template:
+    metadata:
+      labels:
+        app: tasky_fabwizia
+    spec:
+      containers:
+      - name: tasky_fabwizia
+        image: fabwiziaregistry.azurecr.io/tasky_fabwizia:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: MONGO_URI
+          value: "mongodb://74.225.169.215:27017/MongoDB-vm"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tasky_fabwizia-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: tasky_fabwizia
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
