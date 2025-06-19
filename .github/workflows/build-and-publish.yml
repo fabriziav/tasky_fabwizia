@@ -42,7 +42,6 @@ jobs:
           docker push ${{ secrets.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
 
 
-
 #      - name: Extract metadata (tags, labels) for Docker
 #        id: meta
 #        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
