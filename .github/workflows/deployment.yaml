@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: Deploy Tasky on AKS
+  name: deploy-tasky
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: tasky_fabwizia
+      app: tasky-fabwizia
   template:
     metadata:
       labels:
-        app: tasky_fabwizia
+        app: tasky-fabwizia
     spec:
       containers:
-      - name: tasky_fabwizia
-        image: fabwiziaregistry.azurecr.io/tasky_fabwizia:latest
+      - name: tasky-fabwizia
+        image: fabwiziaregistry.azurecr.io/fabriziav/tasky_fabwizia:latest
         ports:
         - containerPort: 3000
         env:
@@ -24,7 +24,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: tasky_fabwizia-service
+  name: tasky-fabwizia-service
 spec:
   type: LoadBalancer
   selector:
