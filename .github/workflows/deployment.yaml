@@ -19,7 +19,7 @@ spec:
         - containerPort: 3000
         env:
         - name: MONGO_URI
-          value: "mongodb://74.225.169.215:27017/MongoDB-vm"
+          value: "mongodb://74.225.169.215:27017/supermarket"
 ---
 apiVersion: v1
 kind: Service
