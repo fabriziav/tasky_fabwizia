@@ -407,20 +407,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install and run TruffleHog directly
-        run: |
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-          curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/${LATEST_VERSION}/trufflehog_${LATEST_VERSION#v}_linux_amd64.tar.gz" | tar -xz
-          # Scan filesystem directly - this will catch all hardcoded secrets
-          pwd
-          ls -R
-          ./trufflehog filesystem . --no-verification --json --debug
+#      - name: Install and run TruffleHog directly
+#        run: |
+#          LATEST_VERSION=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+#          curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/${LATEST_VERSION}/trufflehog_${LATEST_VERSION#v}_linux_amd64.tar.gz" | tar -xz
+#          # Scan filesystem directly - this will catch all hardcoded secrets
+#          pwd
+#          ls -R
+#          ./trufflehog filesystem . --no-verification --json --debug
           
-      - name: Secret scan
-        uses: trufflesecurity/trufflehog@main
-        with:
-          base: ""
-          head: ${{ github.ref_name }}
-          extra_args: --debug --json --no-verification
+#      - name: Secret scan
+#        uses: trufflesecurity/trufflehog@main
+#        with:
+#          base: ""
+#          head: ${{ github.ref_name }}
+#          extra_args: --debug --json --no-verification
 
-
+      - name: Install and run TruffleHog v2
+        run: |
+          git clone https://github.com/trufflesecurity/trufflehog.git
+          cd trufflehog
+          git checkout v2.1.0
+          pip install .
+          cd ..
+          trufflehog --regex --entropy=True .
