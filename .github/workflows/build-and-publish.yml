@@ -427,4 +427,4 @@ jobs:
         run: |
           git clone https://github.com/dxa4481/truffleHog.git
           pip install requests gitpython
-          python truffleHog/truffleHog.py --regex --entropy=True .
+          python truffleHog/trufflehog.py --regex --entropy=True .
