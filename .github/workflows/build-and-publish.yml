@@ -412,7 +412,7 @@ jobs:
           LATEST_VERSION=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/${LATEST_VERSION}/trufflehog_${LATEST_VERSION#v}_linux_amd64.tar.gz" | tar -xz
           # Scan filesystem directly - this will catch all hardcoded secrets
-          ./trufflehog filesystem . --no-verification --json
+          ./trufflehog filesystem . --no-verification --json --debug
           
       - name: Secret scan
         uses: trufflesecurity/trufflehog@main
