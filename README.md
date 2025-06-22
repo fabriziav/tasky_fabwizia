@@ -1,5 +1,41 @@
-# Docker
-A Dockerfile has been provided to run this application.  The default port exposed is 8080.
+# 📝 Tasky Fabwizia
+
+**Tasky Fabwizia** is a lightweight, modern to-do list application built with **React**, **TypeScript**, and **TailwindCSS**. It provides a minimal interface for adding, completing, and removing tasks—ideal for users who value simplicity and efficiency in task management.
+
+---
+
+## 🚀 Features
+
+- ✅ Add and remove tasks easily  
+- ✏️ Mark tasks as completed or active  
+- 🎨 Clean and responsive UI  
+- 🌙 Dark/light theme toggle  
+- ⚡ Fast performance with Vite bundler  
+
+---
+
+## 🛠️ Tech Stack
+
+- [React](https://reactjs.org/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Vite](https://vitejs.dev/)
+
+---
+
+## 📦 Getting Started
+
+Clone the repo:
+
+```bash
+git clone https://github.com/fabriziav/tasky_fabwizia.git
+cd tasky_fabwizia
+
+## 📁 Project Structure
+- src/components: Contains the Todo, TodoList, ThemeToggle, and other reusable UI components.
+- src/types: Defines TypeScript interfaces like Todo.
+- src/store: LocalStorage logic and helper functions.
+- src/App.tsx: Main app logic and layout.
 
 # Environment Variables
 The following environment variables are needed.
