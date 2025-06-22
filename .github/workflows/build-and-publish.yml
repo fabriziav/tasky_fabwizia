@@ -406,9 +406,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
-      - name: Dogfood
-        uses: ./
-        id: dogfood
+      - name: Secret scan
+        uses: trufflesecurity/trufflehog@main
         with:
-          extra_args: --results=verified
+          extra_args: --results=verified --fail
