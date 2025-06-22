@@ -409,4 +409,4 @@ jobs:
       - name: Secret scan
         uses: trufflesecurity/trufflehog@main
         with:
-          extra_args: --results=verified --debug
+          extra_args: --only-verified=false filesystem . --debug
