@@ -406,14 +406,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Install and run TruffleHog directly
-        run: |
-          curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/download/v3.63.2/trufflehog_3.63.2_linux_amd64.tar.gz | tar -xz
-          ./trufflehog filesystem . --json --no-verification
+#      - name: Install and run TruffleHog directly
+#        run: |
+#          curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/download/v3.63.2/trufflehog_3.63.2_linux_amd64.tar.gz | tar -xz
+#          ./trufflehog filesystem . --json --no-verification
           
-#      - name: Secret scan
-#        uses: trufflesecurity/trufflehog@main
-#        with:
-#          base: ""
-#          head: "HEAD"
-#          extra_args: --debug --json --no-verification
+      - name: Secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          base: main
+          head: HEAD
+          extra_args: --debug --json --no-verification
