@@ -398,3 +398,250 @@ jobs:
       - name: Cleanup
         run: kubectl delete job kube-bench --ignore-not-found=true
         if: always()
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch full history for better secret detection
+        
+      - name: Run TruffleHog secrets scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+        continue-on-error: true
+        id: trufflehog
+        
+      - name: Install additional secret scanning tools
+        run: |
+          # Install gitleaks
+          wget -O gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.18.0_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+          
+          # Install detect-secrets
+          pip install detect-secrets
+          
+      - name: Run Gitleaks scan
+        run: |
+          echo "=== Running Gitleaks Scan ==="
+          gitleaks detect --source . --report-format json --report-path gitleaks-report.json --verbose || echo "Gitleaks found potential secrets"
+          
+          # Check if secrets were found
+          if [ -f gitleaks-report.json ]; then
+            SECRET_COUNT=$(jq length gitleaks-report.json 2>/dev/null || echo "0")
+            echo "Gitleaks found $SECRET_COUNT potential secrets"
+            if [ "$SECRET_COUNT" -gt 0 ]; then
+              echo "GITLEAKS_SECRETS_FOUND=true" >> $GITHUB_ENV
+            fi
+          fi
+        continue-on-error: true
+        
+      - name: Run detect-secrets scan
+        run: |
+          echo "=== Running detect-secrets Scan ==="
+          detect-secrets scan --all-files --baseline .secrets.baseline --force-use-all-plugins || echo "detect-secrets scan completed"
+          
+          if [ -f .secrets.baseline ]; then
+            SECRET_COUNT=$(jq '.results | to_entries | length' .secrets.baseline 2>/dev/null || echo "0")
+            echo "detect-secrets found $SECRET_COUNT files with potential secrets"
+            if [ "$SECRET_COUNT" -gt 0 ]; then
+              echo "DETECT_SECRETS_FOUND=true" >> $GITHUB_ENV
+            fi
+          fi
+        continue-on-error: true
+        
+      - name: Custom secrets pattern scan
+        run: |
+          echo "=== Running Custom Pattern Scan ==="
+          
+          # Create custom secrets scanning script
+          cat > custom_secrets_scan.py << 'EOF'
+          import os
+          import re
+          import json
+          from pathlib import Path
+          
+          # Common secret patterns
+          SECRET_PATTERNS = {
+              'aws_access_key': r'AKIA[0-9A-Z]{16}',
+              'aws_secret_key': r'[0-9a-zA-Z/+]{40}',
+              'api_key': r'[aA][pP][iI][_]?[kK][eE][yY].*[=:]\s*["\']?([0-9a-zA-Z\-_]{16,})["\']?',
+              'password': r'[pP][aA][sS][sS][wW][oO][rR][dD].*[=:]\s*["\']?([^\s"\']{8,})["\']?',
+              'secret': r'[sS][eE][cC][rR][eE][tT].*[=:]\s*["\']?([0-9a-zA-Z\-_]{16,})["\']?',
+              'token': r'[tT][oO][kK][eE][nN].*[=:]\s*["\']?([0-9a-zA-Z\-_]{16,})["\']?',
+              'private_key': r'-----BEGIN.*PRIVATE KEY-----',
+              'github_token': r'gh[pousr]_[A-Za-z0-9_]{36}',
+              'slack_token': r'xox[baprs]-[0-9a-zA-Z\-]+',
+              'discord_token': r'[MN][A-Za-z\d]{23}\.[\w\-]{6}\.[\w\-]{27}',
+              'google_api': r'AIza[0-9A-Za-z\-_]{35}',
+              'connection_string': r'[sS][eE][rR][vV][eE][rR]=.*[pP][aA][sS][sS][wW][oO][rR][dD]=',
+              'jwt_token': r'eyJ[A-Za-z0-9\-_=]+\.eyJ[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+',
+          }
+          
+          # Files to exclude from scanning
+          EXCLUDE_PATTERNS = [
+              r'\.git/',
+              r'node_modules/',
+              r'\.jpg, r'\.png, r'\.gif, r'\.pdf,
+              r'\.zip, r'\.tar, r'\.gz,
+              r'\.min\.js, r'\.min\.css,
+              r'package-lock\.json,
+              r'\.secrets\.baseline,
+              r'gitleaks-report\.json
+          ]
+          
+          def should_exclude(file_path):
+              for pattern in EXCLUDE_PATTERNS:
+                  if re.search(pattern, str(file_path)):
+                      return True
+              return False
+          
+          def scan_file(file_path):
+              findings = []
+              try:
+                  with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                      content = f.read()
+                      
+                  for secret_type, pattern in SECRET_PATTERNS.items():
+                      matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
+                      for match in matches:
+                          # Get line number
+                          line_num = content[:match.start()].count('\n') + 1
+                          line_content = content.split('\n')[line_num - 1].strip()
+                          
+                          # Skip common false positives
+                          if any(fp in line_content.lower() for fp in ['example', 'placeholder', 'dummy', 'test', 'fake', 'sample', 'todo', 'xxx']):
+                              continue
+                          
+                          findings.append({
+                              'file': str(file_path),
+                              'line': line_num,
+                              'type': secret_type,
+                              'content': line_content[:100] + '...' if len(line_content) > 100 else line_content,
+                              'matched_text': match.group(0)[:50] + '...' if len(match.group(0)) > 50 else match.group(0)
+                          })
+              except Exception as e:
+                  print(f"Error scanning {file_path}: {e}")
+              
+              return findings
+          
+          def main():
+              all_findings = []
+              
+              for root, dirs, files in os.walk('.'):
+                  # Skip hidden directories
+                  dirs[:] = [d for d in dirs if not d.startswith('.')]
+                  
+                  for file in files:
+                      file_path = Path(root) / file
+                      
+                      if should_exclude(file_path):
+                          continue
+                      
+                      findings = scan_file(file_path)
+                      all_findings.extend(findings)
+              
+              # Output results
+              if all_findings:
+                  print(f"=== Found {len(all_findings)} potential secrets ===")
+                  print("| File | Line | Type | Content |")
+                  print("|------|------|------|---------|")
+                  
+                  for finding in all_findings:
+                      file_short = finding['file'][:30] + '...' if len(finding['file']) > 30 else finding['file']
+                      content_safe = finding['content'].replace('|', '\\|')
+                      print(f"| {file_short} | {finding['line']} | {finding['type']} | {content_safe} |")
+                  
+                  # Save detailed results
+                  with open('custom-secrets-report.json', 'w') as f:
+                      json.dump(all_findings, f, indent=2)
+                      
+                  return len(all_findings)
+              else:
+                  print("No potential secrets found in custom scan")
+                  return 0
+          
+          if __name__ == "__main__":
+              secret_count = main()
+              exit(1 if secret_count > 0 else 0)
+          EOF
+          
+          python3 custom_secrets_scan.py
+          CUSTOM_EXIT_CODE=$?
+          
+          if [ $CUSTOM_EXIT_CODE -ne 0 ]; then
+            echo "CUSTOM_SECRETS_FOUND=true" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+        
+      - name: Generate secrets scan summary
+        run: |
+          echo "=== Secrets Scanning Summary ==="
+          echo ""
+          
+          SECRETS_FOUND=false
+          
+          # Check TruffleHog results
+          if [ "${{ steps.trufflehog.outcome }}" == "failure" ]; then
+            echo "🔍 TruffleHog: SECRETS DETECTED"
+            SECRETS_FOUND=true
+          else
+            echo "✅ TruffleHog: No verified secrets found"
+          fi
+          
+          # Check Gitleaks results
+          if [ "$GITLEAKS_SECRETS_FOUND" == "true" ]; then
+            echo "🔍 Gitleaks: SECRETS DETECTED"
+            SECRETS_FOUND=true
+            if [ -f gitleaks-report.json ]; then
+              echo "Gitleaks findings:"
+              jq -r '.[] | "  - \(.File):\(.StartLine) - \(.Description)"' gitleaks-report.json | head -10
+            fi
+          else
+            echo "✅ Gitleaks: No secrets found"
+          fi
+          
+          # Check detect-secrets results
+          if [ "$DETECT_SECRETS_FOUND" == "true" ]; then
+            echo "🔍 detect-secrets: POTENTIAL SECRETS DETECTED"
+            SECRETS_FOUND=true
+          else
+            echo "✅ detect-secrets: No secrets found"
+          fi
+          
+          # Check custom scan results
+          if [ "$CUSTOM_SECRETS_FOUND" == "true" ]; then
+            echo "🔍 Custom Scan: POTENTIAL SECRETS DETECTED"
+            SECRETS_FOUND=true
+          else
+            echo "✅ Custom Scan: No secrets found"
+          fi
+          
+          echo ""
+          if [ "$SECRETS_FOUND" == "true" ]; then
+            echo "❌ SECRETS DETECTED: Please review and remove any hardcoded secrets before proceeding."
+            echo "🔒 Security recommendations:"
+            echo "   - Use environment variables or secret management services"
+            echo "   - Add sensitive files to .gitignore"
+            echo "   - Consider using tools like Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault"
+            echo "   - Review the uploaded artifacts for detailed findings"
+            exit 1
+          else
+            echo "✅ No secrets detected in any scans"
+          fi
+        
+      - name: Upload secrets scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: secrets-scan-results
+          path: |
+            gitleaks-report.json
+            .secrets.baseline
+            custom-secrets-report.json
+        if: always()
