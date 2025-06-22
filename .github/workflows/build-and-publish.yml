@@ -38,8 +38,8 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker build -t ${{ secrets.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest .
-          docker push ${{ secrets.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
 
 #      - name: Extract metadata (tags, labels) for Docker
