@@ -425,9 +425,5 @@ jobs:
 
       - name: Install and run TruffleHog v2
         run: |
-          git clone https://github.com/trufflesecurity/trufflehog.git
-          cd trufflehog
-          git checkout v2.1.0
-          pip install .
-          cd ..
-          trufflehog --regex --entropy=True .
+          docker run --rm -v ${{ github.workspace }}:/pwd trufflesecurity/trufflehog:2 \
+          trufflehog --regex --entropy=True /pwd
