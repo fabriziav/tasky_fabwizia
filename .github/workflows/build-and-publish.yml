@@ -408,7 +408,7 @@ jobs:
           fetch-depth: 0
       - name: Install and run TruffleHog directly
         run: |
-          curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/latest/download/trufflehog_linux_amd64.tar.gz | tar -xz
+          curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/download/v3.63.2/trufflehog_3.63.2_linux_amd64.tar.gz | tar -xz
           ./trufflehog filesystem . --json --no-verification
           
 #      - name: Secret scan
