@@ -61,7 +61,7 @@ jobs:
           kubectl rollout status deployment/deploy-tasky
           kubectl get services tasky-fabrizia-service
 
-  cis-benchmark-audit:
+  kubernetes-cis-benchmark:
     runs-on: ubuntu-latest
     needs: build-and-push-image
     steps:
@@ -77,40 +77,205 @@ jobs:
         run: |
           az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }}
           
-      - name: Clone CIS Benchmarks Audit tool
+      - name: Verify cluster connection
         run: |
-          git clone https://github.com/finalduty/cis-benchmarks-audit.git
-          cd cis-benchmarks-audit
+          kubectl cluster-info
+          kubectl get nodes
           
-      - name: Install dependencies
+      - name: Create kube-bench job manifest
         run: |
-          cd cis-benchmarks-audit
-          # Install any required dependencies (check the repo's README for specifics)
-          sudo apt-get update
-          sudo apt-get install -y python3 python3-pip
+          cat > kube-bench-job.yaml << EOF
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: kube-bench
+          spec:
+            template:
+              spec:
+                hostPID: true
+                nodeSelector:
+                  kubernetes.io/os: linux
+                tolerations:
+                - key: node-role.kubernetes.io/master
+                  operator: Exists
+                  effect: NoSchedule
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                containers:
+                - name: kube-bench
+                  image: aquasec/kube-bench:latest
+                  command: ["kube-bench"]
+                  args: ["--benchmark", "aks-1.0", "--json"]
+                  volumeMounts:
+                  - name: var-lib-etcd
+                    mountPath: /var/lib/etcd
+                    readOnly: true
+                  - name: var-lib-kubelet
+                    mountPath: /var/lib/kubelet
+                    readOnly: true
+                  - name: var-lib-kube-scheduler
+                    mountPath: /var/lib/kube-scheduler
+                    readOnly: true
+                  - name: var-lib-kube-controller-manager
+                    mountPath: /var/lib/kube-controller-manager
+                    readOnly: true
+                  - name: etc-systemd
+                    mountPath: /etc/systemd
+                    readOnly: true
+                  - name: lib-systemd
+                    mountPath: /lib/systemd/
+                    readOnly: true
+                  - name: srv-kubernetes
+                    mountPath: /srv/kubernetes/
+                    readOnly: true
+                  - name: etc-kubernetes
+                    mountPath: /etc/kubernetes
+                    readOnly: true
+                  - name: usr-bin
+                    mountPath: /usr/local/mount-from-host/bin
+                    readOnly: true
+                  - name: etc-cni-netd
+                    mountPath: /etc/cni/net.d/
+                    readOnly: true
+                  - name: opt-cni-bin
+                    mountPath: /opt/cni/bin/
+                    readOnly: true
+                restartPolicy: Never
+                volumes:
+                - name: var-lib-etcd
+                  hostPath:
+                    path: "/var/lib/etcd"
+                - name: var-lib-kubelet
+                  hostPath:
+                    path: "/var/lib/kubelet"
+                - name: var-lib-kube-scheduler
+                  hostPath:
+                    path: "/var/lib/kube-scheduler"
+                - name: var-lib-kube-controller-manager
+                  hostPath:
+                    path: "/var/lib/kube-controller-manager"
+                - name: etc-systemd
+                  hostPath:
+                    path: "/etc/systemd"
+                - name: lib-systemd
+                  hostPath:
+                    path: "/lib/systemd"
+                - name: srv-kubernetes
+                  hostPath:
+                    path: "/srv/kubernetes"
+                - name: etc-kubernetes
+                  hostPath:
+                    path: "/etc/kubernetes"
+                - name: usr-bin
+                  hostPath:
+                    path: "/usr/bin"
+                - name: etc-cni-netd
+                  hostPath:
+                    path: "/etc/cni/net.d/"
+                - name: opt-cni-bin
+                  hostPath:
+                    path: "/opt/cni/bin/"
+          EOF
           
-      - name: Run CIS Benchmark Audit
+      - name: Run kube-bench CIS audit
         run: |
-          cd cis-benchmarks-audit
-          # Run the audit against your AKS cluster
-          # Adjust the command based on the tool's documentation
-          python3 audit.py --target kubernetes --output-format json > cis-audit-results.json
+          # Deploy the kube-bench job
+          kubectl apply -f kube-bench-job.yaml
+          
+          # Wait for the job to complete (with timeout)
+          echo "Waiting for kube-bench job to complete..."
+          kubectl wait --for=condition=complete job/kube-bench --timeout=300s
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods --selector=job-name=kube-bench --output=jsonpath='{.items[0].metadata.name}')
+          echo "kube-bench pod: $POD_NAME"
+          
+          # Retrieve the results
+          kubectl logs $POD_NAME > kube-bench-results.json
+          
         continue-on-error: true  # Don't fail the workflow if audit finds issues
         
+      - name: Process and display results
+        run: |
+          if [ -f kube-bench-results.json ]; then
+            echo "=== Kube-bench CIS Audit Results Summary ==="
+            
+            # Try to parse JSON results for summary
+            python3 << 'EOF'
+import json
+import sys
+
+try:
+    with open('kube-bench-results.json', 'r') as f:
+        content = f.read()
+        
+    # kube-bench output might contain non-JSON lines, so extract JSON part
+    lines = content.split('\n')
+    json_started = False
+    json_lines = []
+    
+    for line in lines:
+        if line.strip().startswith('{'):
+            json_started = True
+        if json_started:
+            json_lines.append(line)
+            
+    if json_lines:
+        json_str = '\n'.join(json_lines)
+        try:
+            data = json.loads(json_str)
+            
+            print(f"Benchmark: {data.get('text', 'Unknown')}")
+            print(f"Version: {data.get('version', 'Unknown')}")
+            
+            total_pass = data.get('Totals', {}).get('total_pass', 0)
+            total_fail = data.get('Totals', {}).get('total_fail', 0)
+            total_warn = data.get('Totals', {}).get('total_warn', 0)
+            total_info = data.get('Totals', {}).get('total_info', 0)
+            
+            print(f"\nResults Summary:")
+            print(f"✅ Passed: {total_pass}")
+            print(f"❌ Failed: {total_fail}")
+            print(f"⚠️  Warnings: {total_warn}")
+            print(f"ℹ️  Info: {total_info}")
+            
+            # Show failed tests
+            if total_fail > 0:
+                print(f"\n🔍 Failed Tests:")
+                for control in data.get('Controls', []):
+                    for test in control.get('tests', []):
+                        for result in test.get('results', []):
+                            if result.get('status') == 'FAIL':
+                                print(f"  - {result.get('test_number', 'N/A')}: {result.get('test_desc', 'N/A')}")
+                                
+        except json.JSONDecodeError as e:
+            print(f"Could not parse JSON results: {e}")
+            print("Raw output:")
+            print(content[:1000] + "..." if len(content) > 1000 else content)
+    else:
+        print("No JSON output found. Raw output:")
+        print(content[:1000] + "..." if len(content) > 1000 else content)
+        
+except Exception as e:
+    print(f"Error processing results: {e}")
+    with open('kube-bench-results.json', 'r') as f:
+        content = f.read()
+        print("Raw output:")
+        print(content[:1000] + "..." if len(content) > 1000 else content)
+EOF
+          else
+            echo "❌ No kube-bench results found"
+          fi
+          
       - name: Upload CIS Audit Results
         uses: actions/upload-artifact@v4
         with:
-          name: cis-audit-results
-          path: cis-benchmarks-audit/cis-audit-results.json
+          name: kube-bench-cis-results
+          path: kube-bench-results.json
           
-      - name: Display Audit Summary
+      - name: Cleanup
         run: |
-          cd cis-benchmarks-audit
-          echo "CIS Benchmark Audit Summary:"
-          if [ -f cis-audit-results.json ]; then
-            # Basic summary - adjust based on the tool's output format
-            cat cis-audit-results.json | head -20
-          else
-            echo "No audit results file found"
-          fi
-
+          # Clean up the kube-bench job
+          kubectl delete job kube-bench --ignore-not-found=true
+        if: always()
