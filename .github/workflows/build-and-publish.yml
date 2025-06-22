@@ -48,9 +48,9 @@ jobs:
         run: |
           az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }}
 
-      - name: Ensure ACR is attached to AKS
-        run: |
-          az aks update --name ${{ env.AKS_CLUSTER_NAME }} --resource-group ${{ env.AKS_RESOURCE_GROUP }} --attach-acr ${{ secrets.ACR_NAME }}
+#      - name: Ensure ACR is attached to AKS
+#        run: |
+#          az aks update --name ${{ env.AKS_CLUSTER_NAME }} --resource-group ${{ env.AKS_RESOURCE_GROUP }} --attach-acr ${{ secrets.ACR_NAME }}
   
       - name: Deploy to AKS
         run: |
