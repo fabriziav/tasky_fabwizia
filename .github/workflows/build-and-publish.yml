@@ -10,15 +10,15 @@ on:
     branches: ['main']
 
 env:
-  REGISTRY: ghcr.io
+#  REGISTRY: ghcr.io
   IMAGE_NAME: taskyfabrizia
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+#    permissions:
+#      contents: read
+#      packages: write
 
     steps:
       - name: Checkout repository
