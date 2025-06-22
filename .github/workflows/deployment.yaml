@@ -6,31 +6,31 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: taskyfabwizia
+      app: taskyfabrizia
   template:
     metadata:
       labels:
-        app: taskyfabwizia
+        app: taskyfabrizia
     spec:
       containers:
-      - name: taskyfabwizia
-        image: fabwiziaregistry.azurecr.io/fabriziav/tasky_fabwizia:latest
+      - name: taskyfabrizia
+        image: fabwiziaregistry.azurecr.io/fabriziav/taskyfabrizia:latest
         ports:
         - containerPort: 8080
         env:
         - name: MONGODB_URI
-          value: "mongodb://192.168.10.4:27017/supermarket"
+          value: "mongodb://192.168.10.4:27017/go-mongodb"
         - name: SECRET_KEY
           value: "secret123"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: tasky-fabwizia-service
+  name: tasky-fabrizia-service
 spec:
   type: LoadBalancer
   selector:
-    app: taskyfabwizia
+    app: taskyfabrizia
   ports:
   - protocol: TCP
     port: 80
