@@ -407,13 +407,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Secret scan
-        uses: trufflesecurity/trufflehog@main
-        with:
-          base: ""
-          head: ${{ github.ref_name }}
-          extra_args: --debug --json --no-verification
-
       - name: Install and run TruffleHog directly
         run: |
           LATEST_VERSION=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -421,3 +414,11 @@ jobs:
           # Scan filesystem directly - this will catch all hardcoded secrets
           ./trufflehog filesystem . --no-verification --json
           
+      - name: Secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          base: ""
+          head: ${{ github.ref_name }}
+          extra_args: --debug --json --no-verification
+
+
