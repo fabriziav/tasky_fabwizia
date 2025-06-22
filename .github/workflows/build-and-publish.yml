@@ -13,6 +13,8 @@ env:
   IMAGE_NAME: taskyfabrizia
   AKS_CLUSTER_NAME: fabwizia-k8s
   AKS_RESOURCE_GROUP: Application_Tier2
+  SPECTRAL_DSN: ${{ secrets.SPECTRAL_DSN }}
+
 
 jobs:
   build-and-push-image:
@@ -407,16 +409,11 @@ jobs:
         with:
           fetch-depth: 0
           
-      - name: Install Gitleaks
-        run: |
-          wget https://github.com/gitleaks/gitleaks/releases/download/v8.27.2/gitleaks_8.27.2_linux_x86_64.tar.gz
-          tar -xzf gitleaks_8.27.2_linux_x86_64.tar.gz
-          chmod +x gitleaks
-          sudo mv gitleaks /usr/local/bin/
-
-      - name: Run Gitleaks scan
-        run: |
-          gitleaks detect --source . --verbose
+      - name: Spectral scan
+        uses: checkpointsw/spectral-github-action@v3
+        with:
+          spectral-dsn: ${{ env.SPECTRAL_DSN}}
+          spectral-args: scan --engines secrets --include-tags base,audit
             
 #      - name: Install and run TruffleHog directly
 #        run: |
