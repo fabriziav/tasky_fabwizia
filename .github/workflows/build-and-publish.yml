@@ -12,13 +12,12 @@ on:
 env:
 #  REGISTRY: ghcr.io
   IMAGE_NAME: taskyfabrizia
+  AKS_CLUSTER_NAME: fabwizia-k8s
+  AKS_RESOURCE_GROUP: Application_Tier2
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
-#    permissions:
-#      contents: read
-#      packages: write
 
     steps:
       - name: Checkout repository
@@ -45,6 +44,22 @@ jobs:
           docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Ensure ACR is attached to AKS
+        run: |
+          az aks update --name ${{ env.AKS_CLUSTER_NAME }} --resource-group ${{ env.AKS_RESOURCE_GROUP }} --attach-acr ${{ secrets.ACR_NAME }}
+  
+      - name: Deploy to AKS
+        run: |
+          kubectl apply -f deployment.yaml
+          
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/deploy-tasky
+          kubectl get services tasky-fabrizia-service
 
 #      - name: Extract metadata (tags, labels) for Docker
 #        id: meta
