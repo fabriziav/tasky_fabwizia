@@ -84,7 +84,7 @@ jobs:
           
       - name: Create kube-bench job manifest
         run: |
-          cat > kube-bench-job.yaml << EOF
+          cat > kube-bench-job.yaml << 'EOF'
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -180,95 +180,23 @@ jobs:
           
       - name: Run kube-bench CIS audit
         run: |
-          # Deploy the kube-bench job
           kubectl apply -f kube-bench-job.yaml
-          
-          # Wait for the job to complete (with timeout)
           echo "Waiting for kube-bench job to complete..."
           kubectl wait --for=condition=complete job/kube-bench --timeout=300s
-          
-          # Get the pod name
           POD_NAME=$(kubectl get pods --selector=job-name=kube-bench --output=jsonpath='{.items[0].metadata.name}')
           echo "kube-bench pod: $POD_NAME"
-          
-          # Retrieve the results
           kubectl logs $POD_NAME > kube-bench-results.json
-          
-        continue-on-error: true  # Don't fail the workflow if audit finds issues
+        continue-on-error: true
         
       - name: Process and display results
         run: |
           if [ -f kube-bench-results.json ]; then
             echo "=== Kube-bench CIS Audit Results Summary ==="
-            
-            # Create a separate Python script to avoid YAML issues
-            cat > process_results.py << 'PYTHON_SCRIPT'
-import json
-import sys
-
-try:
-    with open('kube-bench-results.json', 'r') as f:
-        content = f.read()
-        
-    # kube-bench output might contain non-JSON lines, so extract JSON part
-    lines = content.split('\n')
-    json_started = False
-    json_lines = []
-    
-    for line in lines:
-        if line.strip().startswith('{'):
-            json_started = True
-        if json_started:
-            json_lines.append(line)
-            
-    if json_lines:
-        json_str = '\n'.join(json_lines)
-        try:
-            data = json.loads(json_str)
-            
-            print("Benchmark: {}".format(data.get('text', 'Unknown')))
-            print("Version: {}".format(data.get('version', 'Unknown')))
-            
-            total_pass = data.get('Totals', {}).get('total_pass', 0)
-            total_fail = data.get('Totals', {}).get('total_fail', 0)
-            total_warn = data.get('Totals', {}).get('total_warn', 0)
-            total_info = data.get('Totals', {}).get('total_info', 0)
-            
-            print("\nResults Summary:")
-            print("Passed: {}".format(total_pass))
-            print("Failed: {}".format(total_fail))
-            print("Warnings: {}".format(total_warn))
-            print("Info: {}".format(total_info))
-            
-            # Show failed tests
-            if total_fail > 0:
-                print("\nFailed Tests:")
-                for control in data.get('Controls', []):
-                    for test in control.get('tests', []):
-                        for result in test.get('results', []):
-                            if result.get('status') == 'FAIL':
-                                print("  - {}: {}".format(result.get('test_number', 'N/A'), result.get('test_desc', 'N/A')))
-                                
-        except json.JSONDecodeError as e:
-            print("Could not parse JSON results: {}".format(e))
-            print("Raw output:")
-            print(content[:1000] + "..." if len(content) > 1000 else content)
-    else:
-        print("No JSON output found. Raw output:")
-        print(content[:1000] + "..." if len(content) > 1000 else content)
-        
-except Exception as e:
-    print("Error processing results: {}".format(e))
-    with open('kube-bench-results.json', 'r') as f:
-        content = f.read()
-        print("Raw output:")
-        print(content[:1000] + "..." if len(content) > 1000 else content)
-PYTHON_SCRIPT
-            
-            # Run the Python script
-            python3 process_results.py
+            echo "Results saved to artifact for detailed analysis"
+            echo "First 50 lines of output:"
+            head -50 kube-bench-results.json
           else
-            echo "❌ No kube-bench results found"
+            echo "No kube-bench results found"
           fi
           
       - name: Upload CIS Audit Results
@@ -278,7 +206,5 @@ PYTHON_SCRIPT
           path: kube-bench-results.json
           
       - name: Cleanup
-        run: |
-          # Clean up the kube-bench job
-          kubectl delete job kube-bench --ignore-not-found=true
+        run: kubectl delete job kube-bench --ignore-not-found=true
         if: always()
