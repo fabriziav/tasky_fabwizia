@@ -198,98 +198,185 @@ jobs:
             cat > parse_results.py << 'EOF'
           import json
           import sys
+          import re
           
           def parse_kube_bench_results(filename):
               try:
                   with open(filename, 'r') as f:
                       content = f.read()
                   
+                  # Print first few lines to debug
+                  print("=== Debug: First 10 lines of output ===")
+                  lines = content.split('\n')
+                  for i, line in enumerate(lines[:10]):
+                      print(f"{i+1}: {line}")
+                  print("=== End Debug ===\n")
+                  
                   # Try to parse as JSON
+                  data = None
                   try:
                       data = json.loads(content)
                   except json.JSONDecodeError:
                       # If not valid JSON, try to extract JSON from mixed output
-                      lines = content.split('\n')
-                      json_lines = []
-                      in_json = False
-                      for line in lines:
-                          if line.strip().startswith('{') or in_json:
-                              in_json = True
-                              json_lines.append(line)
-                              if line.strip().endswith('}') and line.count('{') == line.count('}'):
+                      print("Initial JSON parsing failed, trying to extract JSON...")
+                      
+                      # Look for JSON block in the output
+                      json_start = -1
+                      json_end = -1
+                      brace_count = 0
+                      
+                      for i, line in enumerate(lines):
+                          stripped = line.strip()
+                          if stripped.startswith('{') and json_start == -1:
+                              json_start = i
+                              brace_count = stripped.count('{') - stripped.count('}')
+                          elif json_start != -1:
+                              brace_count += stripped.count('{') - stripped.count('}')
+                              if brace_count == 0:
+                                  json_end = i
                                   break
                       
-                      if json_lines:
-                          json_content = '\n'.join(json_lines)
-                          data = json.loads(json_content)
-                      else:
-                          print("Could not extract valid JSON from output")
-                          return
+                      if json_start != -1 and json_end != -1:
+                          json_content = '\n'.join(lines[json_start:json_end+1])
+                          try:
+                              data = json.loads(json_content)
+                              print("Successfully extracted JSON from mixed output")
+                          except json.JSONDecodeError as e:
+                              print(f"Failed to parse extracted JSON: {e}")
+                      
+                      if data is None:
+                          print("Could not extract valid JSON, trying line-by-line parsing...")
+                          # Last resort: try to find any JSON objects line by line
+                          for line in lines:
+                              if line.strip().startswith('{'):
+                                  try:
+                                      data = json.loads(line.strip())
+                                      print("Found JSON object in single line")
+                                      break
+                                  except:
+                                      continue
                   
-                  # Extract all test results
-                  all_results = []
-                  
-                  if 'Controls' in data:
-                      for control in data['Controls']:
-                          if 'tests' in control:
-                              for test in control['tests']:
-                                  if 'results' in test:
-                                      for result in test['results']:
-                                          severity = "HIGH" if result.get('scored', True) else "INFO"
-                                          if result['test_result'] in ['FAIL', 'WARN']:
-                                              severity = "HIGH" if result['test_result'] == 'FAIL' else "MEDIUM"
-                                          
-                                          all_results.append({
-                                              'test_number': result.get('test_number', 'N/A'),
-                                              'test_desc': result.get('test_desc', 'N/A')[:80] + ('...' if len(result.get('test_desc', '')) > 80 else ''),
-                                              'result': result.get('test_result', 'N/A'),
-                                              'severity': severity,
-                                              'scored': result.get('scored', True)
-                                          })
-                  
-                  # Sort by severity (FAIL first, then WARN, then others) and limit to top 10
-                  priority_order = {'FAIL': 0, 'WARN': 1, 'PASS': 2, 'INFO': 3}
-                  all_results.sort(key=lambda x: (priority_order.get(x['result'], 4), x['test_number']))
-                  top_results = all_results[:10]
-                  
-                  if not top_results:
-                      print("No test results found in the output")
+                  if data is None:
+                      print("Could not parse JSON from output")
                       return
                   
+                  print(f"=== Parsed JSON structure ===")
+                  print(f"Top-level keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                  
+                  # Extract all test results - handle different kube-bench formats
+                  all_results = []
+                  
+                  # Try different possible structures
+                  controls = data.get('Controls', [])
+                  if not controls and 'controls' in data:
+                      controls = data['controls']
+                  
+                  for control in controls:
+                      print(f"Processing control: {control.get('id', 'unknown')}")
+                      
+                      tests = control.get('tests', [])
+                      if not tests and 'Tests' in control:
+                          tests = control['Tests']
+                      
+                      for test in tests:
+                          results = test.get('results', [])
+                          if not results and 'Results' in test:
+                              results = test['Results']
+                          
+                          for result in results:
+                              # Handle different field names that kube-bench uses
+                              test_number = (result.get('test_number') or 
+                                           result.get('TestNumber') or 
+                                           result.get('id') or 
+                                           result.get('test_id') or 'N/A')
+                              
+                              test_desc = (result.get('test_desc') or 
+                                         result.get('TestDesc') or 
+                                         result.get('description') or 
+                                         result.get('desc') or 'N/A')
+                              
+                              test_result = (result.get('result') or 
+                                           result.get('Result') or 
+                                           result.get('status') or 
+                                           result.get('Status') or 'UNKNOWN')
+                              
+                              scored = result.get('scored', result.get('Scored', True))
+                              
+                              # Determine severity
+                              severity = "INFO"
+                              if test_result.upper() == 'FAIL':
+                                  severity = "HIGH"
+                              elif test_result.upper() == 'WARN':
+                                  severity = "MEDIUM"
+                              elif test_result.upper() == 'PASS':
+                                  severity = "LOW"
+                              
+                              # Truncate description
+                              if len(str(test_desc)) > 80:
+                                  test_desc = str(test_desc)[:80] + "..."
+                              
+                              all_results.append({
+                                  'test_number': str(test_number),
+                                  'test_desc': str(test_desc),
+                                  'result': str(test_result).upper(),
+                                  'severity': severity,
+                                  'scored': scored
+                              })
+                  
+                  print(f"Found {len(all_results)} total test results")
+                  
+                  if not all_results:
+                      print("No test results found in the parsed data")
+                      print("Available data structure:")
+                      print(json.dumps(data, indent=2)[:1000] + "..." if len(json.dumps(data, indent=2)) > 1000 else json.dumps(data, indent=2))
+                      return
+                  
+                  # Sort by severity (FAIL first, then WARN, then others) and limit to top 10
+                  priority_order = {'FAIL': 0, 'WARN': 1, 'PASS': 2, 'INFO': 3, 'UNKNOWN': 4}
+                  all_results.sort(key=lambda x: (priority_order.get(x['result'], 5), x['test_number']))
+                  top_results = all_results[:10]
+                  
                   # Print table header
+                  print("\n=== Top 10 CIS Benchmark Results ===")
                   print("| Test # | Result | Severity | Description |")
                   print("|--------|--------|----------|-------------|")
                   
                   # Print top 10 results
                   for result in top_results:
-                      test_num = result['test_number']
-                      test_result = result['result']
-                      severity = result['severity']
+                      test_num = result['test_number'][:8]  # Limit width
+                      test_result = result['result'][:6]
+                      severity = result['severity'][:8]
                       description = result['test_desc']
                       
-                      print(f"| {test_num:<6} | {test_result:<6} | {severity:<8} | {description} |")
+                      print(f"| {test_num:<8} | {test_result:<6} | {severity:<8} | {description} |")
                   
                   # Print summary
-                  print("")
-                  print("=== Summary ===")
+                  print("\n=== Summary ===")
                   fail_count = sum(1 for r in all_results if r['result'] == 'FAIL')
                   warn_count = sum(1 for r in all_results if r['result'] == 'WARN')
                   pass_count = sum(1 for r in all_results if r['result'] == 'PASS')
                   info_count = sum(1 for r in all_results if r['result'] == 'INFO')
+                  unknown_count = sum(1 for r in all_results if r['result'] == 'UNKNOWN')
                   
                   print(f"Total Tests: {len(all_results)}")
                   print(f"Failed: {fail_count}")
                   print(f"Warnings: {warn_count}")
                   print(f"Passed: {pass_count}")
                   print(f"Info: {info_count}")
+                  print(f"Unknown: {unknown_count}")
                   
               except Exception as e:
                   print(f"Error parsing results: {str(e)}")
-                  print("Raw output (first 100 lines):")
-                  with open(filename, 'r') as f:
-                      lines = f.readlines()
-                      for i, line in enumerate(lines[:100]):
-                          print(f"{i+1}: {line.rstrip()}")
+                  import traceback
+                  traceback.print_exc()
+                  print("\nRaw output (first 50 lines):")
+                  try:
+                      with open(filename, 'r') as f:
+                          lines = f.readlines()
+                          for i, line in enumerate(lines[:50]):
+                              print(f"{i+1}: {line.rstrip()}")
+                  except Exception as file_error:
+                      print(f"Could not read file: {file_error}")
           
           if __name__ == "__main__":
               parse_kube_bench_results('kube-bench-results.json')
