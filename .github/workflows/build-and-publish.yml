@@ -98,7 +98,7 @@ jobs:
         continue-on-error: true  # Don't fail the workflow if audit finds issues
         
       - name: Upload CIS Audit Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cis-audit-results
           path: cis-benchmarks-audit/cis-audit-results.json
