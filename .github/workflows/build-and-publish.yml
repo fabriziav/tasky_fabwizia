@@ -426,5 +426,8 @@ jobs:
       - name: Install and run TruffleHog v2
         run: |
           git clone https://github.com/dxa4481/truffleHog.git
+          cd truffleHog
+          git checkout b36b6fd
           pip install requests gitpython
-          python truffleHog/trufflehog.py --regex --entropy=True .
+          python trufflehog.py --regex --entropy=True ../
+
