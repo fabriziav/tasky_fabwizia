@@ -411,4 +411,4 @@ jobs:
         with:
           base: ""
           head: "HEAD"
-          extra_args: --no-verification --debug
+          extra_args: --debug --json --no-verification
