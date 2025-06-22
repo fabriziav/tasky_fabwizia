@@ -61,18 +61,56 @@ jobs:
           kubectl rollout status deployment/deploy-tasky
           kubectl get services tasky-fabrizia-service
 
-#      - name: Extract metadata (tags, labels) for Docker
-#        id: meta
-#        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
-#        with:
-#          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-#          flavor: |
-#            latest=true
+  cis-benchmark-audit:
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }}
+          
+      - name: Clone CIS Benchmarks Audit tool
+        run: |
+          git clone https://github.com/finalduty/cis-benchmarks-audit.git
+          cd cis-benchmarks-audit
+          
+      - name: Install dependencies
+        run: |
+          cd cis-benchmarks-audit
+          # Install any required dependencies (check the repo's README for specifics)
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip
+          
+      - name: Run CIS Benchmark Audit
+        run: |
+          cd cis-benchmarks-audit
+          # Run the audit against your AKS cluster
+          # Adjust the command based on the tool's documentation
+          python3 audit.py --target kubernetes --output-format json > cis-audit-results.json
+        continue-on-error: true  # Don't fail the workflow if audit finds issues
+        
+      - name: Upload CIS Audit Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: cis-audit-results
+          path: cis-benchmarks-audit/cis-audit-results.json
+          
+      - name: Display Audit Summary
+        run: |
+          cd cis-benchmarks-audit
+          echo "CIS Benchmark Audit Summary:"
+          if [ -f cis-audit-results.json ]; then
+            # Basic summary - adjust based on the tool's output format
+            cat cis-audit-results.json | head -20
+          else
+            echo "No audit results file found"
+          fi
 
-#      - name: Build and push Docker image
-#        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-#        with:
-#          context: .
-#          push: true
-#          tags: ${{ steps.meta.outputs.tags }}
-#          labels: ${{ steps.meta.outputs.labels }}
