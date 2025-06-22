@@ -414,6 +414,6 @@ jobs:
       - name: Secret scan
         uses: trufflesecurity/trufflehog@main
         with:
-          base: main
-          head: HEAD
+          base: ""
+          head: ${{ github.ref_name }}
           extra_args: --debug --json --no-verification
