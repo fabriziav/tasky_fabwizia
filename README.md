@@ -30,6 +30,21 @@ Clone the repo:
 ```bash
 git clone https://github.com/fabriziav/tasky_fabwizia.git
 cd tasky_fabwizia
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+---
 
 ## 📁 Project Structure
 - src/components: Contains the Todo, TodoList, ThemeToggle, and other reusable UI components.
@@ -37,7 +52,9 @@ cd tasky_fabwizia
 - src/store: LocalStorage logic and helper functions.
 - src/App.tsx: Main app logic and layout.
 
-# Environment Variables
+---
+
+## Environment Variables
 The following environment variables are needed.
 |Variable|Purpose|example|
 |---|---|---|
@@ -46,7 +63,9 @@ The following environment variables are needed.
 
 Alternatively, you can create a `.env` file and load it up with the environment variables.
 
-# Running with Go
+---
+
+## Running with Go
 
 Clone the repository into a directory of your choice Run the command `go mod tidy` to download the necessary packages.
 
@@ -55,7 +74,9 @@ You'll also need to add `SECRET_KEY` to the .env file for JWT Authentication.
 
 Run the command `go run main.go` and the project should run on `locahost:8080`
 
-# License
+---
+
+## License
 
 This project is licensed under the terms of the MIT license.
 
