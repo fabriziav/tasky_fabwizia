@@ -1,0 +1,40 @@
+[
+  {
+    "transaction_id": "TXN-2026-0425",
+    "customer_profile": {
+      "full_name": "James Henderson",
+      "primary_email": "j.henderson77@gmail.com",
+      "mobile_number": "212-555-0198"
+    },
+    "identity_verification": {
+      "ssn": "219-00-5684",
+      "drivers_license": "H123-456-789-012"
+    },
+    "billing_details": {
+      "visa_card": "4111222233334444",
+      "cvv": "123",
+      "expiry": "09/28",
+      "billing_address": "1200 Pennsylvania Avenue NW, Washington, DC 20460"
+    },
+    "internal_notes": "User requested high-priority shipping to residential address."
+  },
+  {
+    "account_holder": "Sarah Miller",
+    "contact_info": {
+      "email": "sarah.miller.dev@outlook.com",
+      "work_phone": "+44 7700 900077"
+    },
+    "tax_identifiers": {
+      "itin": "980-12-3456",
+      "vat_id": "GB123456789"
+    },
+    "payment_method": {
+      "mastercard": "5105105105105105",
+      "iban": "GB29 NWBK 6016 1331 9268 79"
+    },
+    "location": {
+      "city": "London",
+      "coordinates": "51.5074 N, 0.1278 W"
+    }
+  }
+]
